@@ -27,6 +27,7 @@
 #include "Environment.hpp"
 #include "TerminalState.hpp"
 #include "windows-sock.h"
+#include "GetVmIdWsl2.hpp"
 
 union IoSockets
 {
@@ -228,25 +229,6 @@ static void start_dummy(std::wstring wslPath, std::wstring wslCmdLine,
     CloseHandle(pi.hThread);
 }
 
-bool GetIdFromRegistry(GUID& guid) {
-    HKEY hKeyRoot = HKEY_LOCAL_MACHINE;
-    std::wstring subKey = L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\HostComputeService\\VolatileStore\\ComputeSystem";
-    HKEY hKey;
-    if (RegOpenKeyEx(hKeyRoot, subKey.c_str(), 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-        DWORD index = 0;
-        WCHAR keyName[256];
-        DWORD keyNameSize = sizeof(keyName) / sizeof(keyName[0]);
-
-        while (RegEnumKeyEx(hKey, index, keyName, &keyNameSize, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
-            RegCloseKey(hKey);
-            std::wstring id = L"{" + std::wstring(keyName) + L"}";
-            return IIDFromString(id.c_str(), &guid) == S_OK;
-        }
-        RegCloseKey(hKey);
-    }
-    return false;
-}
-
 int main(int argc, char *argv[])
 {
     /* Minimum requirement Windows 10 build 17763 aka. version 1809 */
@@ -406,8 +388,9 @@ int main(int argc, char *argv[])
         if (LiftedWSLVersion)
             start_dummy(wslPath, wslCmdLine, distroName, debugMode);
 
-        if (!GetIdFromRegistry(VmId))
-            fatal("Failed to get VM ID from registry\n");
+        // Cannot determine VM ID without a running session with distroId defined.
+        if (!GetVmIdWsl2(DistroId, VmId))
+            fatal("Failed to get VM ID");
 
         inputSock = win_vsock_create();
         outputSock = win_vsock_create();
